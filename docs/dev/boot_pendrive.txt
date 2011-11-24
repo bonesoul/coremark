@@ -1,0 +1,60 @@
+Pendrive (USB disk) Boot
+
+Pendrive fat dosya sistemi ile formatlanýr. (Windows ortamýnda bu iþlem için HP'nin USB format aracý kullanýlabilinir; ftp://ftp.compaq.com/pub/softpaq/sp27001-27500/SP27213.exe)
+
+Pendrive içinde þu þekilde bir dizin yapýsý oluþturulur;
+
+/boot/
+/boot/grub/
+/boot/kernel/
+
+/boot/grub içine grub_usb.zip içindeki stage1, stage2, fat_stage1_5 ve menu.lst dosyalarý kopyalanýr.
+
+/boot/kernel içine ise kernel.bin kopyalanýr.
+
+Bu iþlemlerden sonra pendriveýn yapýsý þu þekilde olacaktýr;
+
+/boot/
+/boot/grub/
+/boot/grub/stage1
+/boot/grub/stage2
+/boot/grub/fat_stage1_5
+/boot/grub/menu.lst
+/boot/kernel/kernel.bin
+
+Daha sonra grub konsoluna geçilir;
+
+----
+# grub
+grub> find /boot/grub/stage1
+ (hd0,1)
+ (hd2,0)
+---
+Yukarýdaki komut ile /boot/grub/stage1 dosyasýnýn bulunduðu diskler aranýr.
+
+grub> find (hd2,0)/boot/ker<TAB>
+grub> find (hd2,0)/boot/kernel/
+
+Bu sayede (hd2)'nin /boot/kernel/ adlý bir klasör içerip içermediði görülebilir. Amaç yanlýþlýkla sistemdeki grub yüklü diskin üzerine yazmayý engellemektir. /boot/kernel klasörü, pendriveda olduðu doðru diski bulmamýz yardýmcý olacak bir komuttur.
+
+pendrivea iþaret eden (hd?) - örnekte (hd2) disk bulunduktan sonra aþaðýdaki komutlarla grub Master Boot Record, pendrivea yazýlýr.
+
+---
+grub> root (hd2,0)
+ Filesystem is type fat, partition type 0xb
+grub> setup (hd2)
+ Checking if "/boot/grub/stage1" exists... yes
+ Checking if "/boot/grub/stage2" exists... yes
+ Checking if "/boot/grub/fat_stage1_5" exists... yes
+ Running "embed /boot/grub/fat_stage1_5 (hd2)"...  15 sectors are embedded.
+succeeded
+ Running "install /boot/grub/stage1 (hd2) (hd2)1+15 p (hd2,0)/boot/grub/stage2
+/boot/grub/menu.lst"... succeeded
+Done.
+grub> quit
+---
+
+Bu iþlemden sonra çekirdek, USB boot destekleyen bir bilgisayarda, pendrive üzerinden boot edilerek çalýþtýrýlabilinir.
+
+
+* http://www.freesoftwaremagazine.com/articles/grub_intro/

@@ -1,0 +1,369 @@
+x86 Sistem Açýlýþý, MBR, Sistem Önyükleyicisi
+
+Hüseyin Uslu
+< huseyinuslu AT enux.org >
+
+Bu dökümanda sistem boot prosesi, mbr ve partition tablosu incelenmiþ ve örnek kaynak kod sunulmuþtur.
+
+1. Giriþ
+MBR, bir diskin hemen baþlangýcýnda bulunan bir kayýttýr. Kýsaca sistemin açýlmasýyla birlikte
+MBR kaydý hafýzaya yüklenir ve yüklenen kod çalýþtýrýr. MBR partition tablosunu araþtýrýr. Uygun
+bir partition buludunduðunda, boot sektörü hafýzaya yüklenir ve çalýþtýrýlýr.  Çalýþtýrýlan
+boot sektörü, iþletim sisteminden iþletim sistemine deðiþir ve genelde görevi, çekirdeði
+çalýþtýrmak için gerekli hazýrlýklarý yapmak ve son olarakda çekirdeði çalýþtýrmaktýr.
+
+
+2. Disk Terminolojisi
+Bu bölümde ön bilgi olarak disk terminolojilerine yer verilecektir.
+
+Sektör: Disk üzerindeki en küçük birimdir.
+iz: Ýz yan yana gelen sektörlerin bileþiminden oluþur
+Silindir: Üstüste gruplandýrýlan izlerden silindir oluþur
+
+[ Bitmedi ]
+
+
+3. Sistem Açýlýþý
+
+3.1 System Startup Sequence
+
+* Ýþlemci bir donaným reset iþleminden hemen sonra, register,buffer ve cache öntanýmlý deðerler atar. Daha sonra
+real modea geçiþ yapýlýr. EIP yazmacýna 0000FFF0h ve CS yazmacýna FFFF0000h deðerleri atanýr. Sonuçta
+CS:EIP (Code Segment: Instruction Pointer) FFFFFFF0h deðerini almýþ olur. (Bu adres EPROM'un üstten 16. byteýný
+göstermektedir)
+
+* BIOS bootstrap rutini, INt 19h caðrýsý ile uygun cihazdan boot sektörü hafýzaya kopyalar (disketin ilk sektörü veyada
+harddisk için CHS adreslemeye göre (Cylinder-head-sector) 0:0:1 sektörü) Bu sektör hafýzada 0x0000:7C00 adresine kopyalanýr.
+Kopyalanan 512'ýn son 2byteý 0xAA55 deðerini içermelidir. (0xAA55 imzasý, Bootstrap Loader'ýn 510. (0x01FE) byteýnda yer alýr)
+
+[
+***
+
+Floppy için boot sektör hafýzaya 0x0000:7C00 adresine kopyalanýr ve kopyalamanýn yapýldýðý hafýza adresin atlanýr.
+Eðer floppyde geçerli boot sektör bulunumazsa, ilk harddiskteki MBR okunmaya çalýþýlýr. Eðer MBR bulunursa, 0x0000:7C000
+adresine kopyalanýr ve bu adreste atlanýr. MBR dahilindeki küçük kod parçasý, kendý partition tablosunda, aktif boot edilebilir
+bir partition arar. Eðer uygun bir partition bulunursa, partitionýn boot sectorunu 0x0000:7C00 adresine kopyalar 
+ve bu hafýza adresine atlar. Hafýzaya en son kopyalanan partition boot sektör kodunun görevi çekirdeði çalýþtýrmak için hazýrlýklara
+baþlamaktýr.
+
+
+]
+
+Bootstrap Loader'ýn hafýzada yerleþimi:
+
+-----------------------------------------
+0x0000:7C00 : Bootstrap kodunu baþlangýcý
+
+  ..    ..
+
+  ..    ..
+
+0x0000:7DFE : Bootstrap imzasý: 0xAA55 (7C00 + 01FE = 7DFE)
+
+
+Örnek bootstrap programý:
+
+-----------------------------------------
+loop:
+	jmp loop
+
+times 510-($-$$) db 0      ; 510byte'ý 0 ekle
+dw 0AA55h                  ; bootstrap imzasý
+
+Son olarak, CS:EIP ayarlanýr ve cpu kontrolü kopyalanan 512bytelýk bootstrape loadera geçirilir.
+
+* Genellikle 512byte sýnýrýndan dolayý bootstrap loaderlar iki parçaya ayrýlýr. Birincil parça; BIOS tarafýndan
+0x0000:7C00'a kopyalanan 512bytelýk bölümdür. Genelde bu bölümün görevi asýl iþi yapacak olan, ikincil bootstrap
+loaderý çalýþtýrmaktýr. 
+
+
+
+* Ýkincil bootstrap loader duruma göre, yazýlmýþ olduðu iþletim sistemi çekirdeðini direkt olarak hafýzaya yükleyip çalýþtýrabilir.
+Eðer bir boot manager mevcut ise, kullanýcýya bir menü sunulacaktýr ve çalýþtýrmak istediði iþletim sistemi için gerekli
+hazýrlýklar yapýlacaktýr. (Örnek boot managerlar: lilo, Grub)
+
+
+
+y. Interruptlar
+
+[ Orjinal olarak, http://www.pobox.com/~ralf/files.html adresindeki x86 interrupt listesinden alýnmýþtýr.
+Daha çok bilgi için orjinal kaynaða bakýnýz ]
+
+[Sadece diskten okuma interruptý verilmistir, yazmaya bu asamada yoktur]
+y.1 INT 13h AH=02h - Hafýzaya sektör(ler) kopyalama
+
+AH=02h
+AL=okunacak sektör sayýsý (0'dan farklý olmalýdýr)
+CH=silindir numarasýnýn düþük 8biti
+CL=(0-5. bitler) sektör numarasý 1-63
+   (6-7. bitler) silindir numarasýnýn yüksek iki biti (sadece harddiskler için)
+DH=head (kafa) numarasý
+DL=sürücü no (disket için 0, harddisk için sadece 7.bit set edilir - (80h))
+ES:BX= okunulan datanýn aktarýlacaðý hafýza alaný
+
+Sonuç:
+Hata durumunda Carry Flag set edilir
+Hata yoksa, Carry Flag clear durumundadýr
+AH=iþlem sonucu (hata kodlarý tablosuna bakýnýz)
+AL=transfer edilen sektör sayýsý (Bazý bioslar için sadee Carry Flag set edildiðinde geçerlidir)
+
+Notlar: 
+Floppy sürücülerde motorun gerektiði kadar hýzlý çalýþmamasýndan dolayý hata oluþabilir.
+Bundan dolayý, okuma iþlemi en az 3 kez tekrarlanmalýdýr. Her denemede, disk INT 13h AH=00h ile
+resetlenmelidir. (Daha fazla detay orjinal dökümanda yer almaktadýr)
+
+y.2 INT 13h - AH=00h - Disk reset iþlemi
+Disk yeni iþlemler için resetlenir ve okuyucu kafa öntanýmlý lokasyona yeniden konumlandýrýlýr
+AH=00h
+DL=sürücü (eðer 7.bit set edilirse hem harddisk hem floppy resetlenir (80h))
+
+Sonuç: 
+AH=iþlem sonucu (hata kodlarý tablosuna bakýnýz)
+Hata durumunda Carry Flag set edilir
+Hata yoksa, Carry Flag clear durumundadýr
+
+Disk islemi için hata kodlarý tablosu:
+
+ 00h	baþarýlý iþlem
+ 01h	AH'de verilen fonksiyon geçersizdir veya geçersiz parametre saðlanmýþtýr 
+ 02h	address mark not found
+ 03h	Disk yazma korumalý (Sadece yazma islemleri icin)
+ 04h	Sektör bulunamadý/okuma hatasý 
+ 05h	Reset iþlemi baþarýsýz (hard disk)
+ 05h	data did not verify correctly (TI Professional PC)
+ 06h	Floppy içindeki media deðiþti (floppy)
+ 07h	drive parameter activity failed (hard disk)
+ 08h	DMA overrun
+ 09h	data boundary error (attempted DMA across 64K boundary or >80h sectors)
+ 0Ah	sorunlu sektör (hard disk)
+ 0Bh	sorunlu iz (hard disk)
+ 0Ch	desteklenmeyen iz veya geçersiz medya
+ 0Dh	invalid number of sectors on format (PS/2 hard disk)
+ 0Eh	control data address mark detected (hard disk)
+ 0Fh	DMA arbitration level out of range (hard disk)
+ 10h	Okumada düzeltilemeyen CRC veya ECC hatasý oluþtuuncorrectable CRC or ECC error on read
+ 11h	Data ECC düzeltildi (hard disk)
+ 20h	controller failure
+ 31h	Sürücüde medya yok (IBM/MS INT 13 extensions)
+ 32h	incorrect drive type stored in CMOS (Compaq)
+ 40h	seek iþlemi baþarýz
+ 80h	zaman aþýmý (hazýr deðil)
+ AAh	sürücü hazýr deðil (hard disk)
+ B0h	volume not locked in drive (INT 13 extensions)
+ B1h	volume locked in drive (INT 13 extensions)
+ B2h	volume not removable (INT 13 extensions)
+ B3h	volume in use (INT 13 extensions)
+ B4h	lock count exceeded (INT 13 extensions)
+ B5h	valid eject request failed (INT 13 extensions)
+ B6h	volume present but read protected (INT 13 extensions)
+ BBh	tanýmlanamayan hata (hard disk)
+ CCh	yazma hatasý (hard disk)
+ E0h	status register error (hard disk)
+ FFh	sense operation failed (hard disk)
+
+ Disk Addressing
+    A sector of the disk is identified by an ordered triple, consisting of cylinder, head, sector. Traditionally, cylinders and head numbering starts with zero, while sectors start with one. Most people think of the disk as being laid out in "row-major order". This means that the numbering goes in the following order; 0:0:1, 0:0:2, 0:0:3, and so on. Although the disk is laid out in three dimensions, it may help to think of it this way.
+    Another way of phrasing the order is that all the sectors are in order, then you proceed to the next head. After every head's set of sectors is the next cylinder. Physically, heads are aligned vertically, cylinders are concentric cylinders about the axis of rotation, and sectors are radial units that form a complete circle about the axis of rotation. My document uses CHS numbering, so cylinders come first, heads next, sectors last. 
+
+y.3 INT 19h - Bootstrap Loader
+Bu interrupt sistemi, hafýzaya içeriðini silmeden veya kesme vektörlerini yenilemeden yeniden baþlamasýný saðlar.
+
+Bu kesme sonrasýnda BIOS, disket sürücü veya harddiskin 0. kafa, 0.iz ve 1.ci sektörünü okumaya çalýþacaktýr.
+Bu sektör bir bootstrap loader ve imzasý içermek durumundadýr. Bu kod, 0x0000:7C00 bellek adresine kopyalandýktan sonra
+, koda iþlemci kontrolü verilir. Çalýþan kod, partition tablosunu aktif bir kayýt için tarayacak ve uygun bir kayýt bulursa,
+kayýtta bilgisi bulunan, iþletim sistemi bootstrap loaderýný yükleyecek ve çalýþtýracaktýr ( Ýþletim sisteminin boot strap
+loaderý aktif partitionun ilk sektöründe yer alýr) IBM PC uyumlu cihazlar, floppy veyada harddiskte uygun bir boot sektör
+bulamazsa INT 18h kesmesini çalýþtýracaktýr.
+
+Master Boot Sektörün içeriði
+(Master Boot Record olarakda adlandýrýlýr)
+
+Ofset	Uzunluk		Açýklama
+0000h	466 byte	Master bootstrap loader kodu
+01BEh	 16 byte	1. partition kaydý
+01CEh	 16 byte	2. partition kaydý
+01DEh	 16 byte	3. partition kaydý
+01EEh	 16 byte	4. partition kaydý
+01FEh	  2 byte	bootstrap imzasý, 0xAA55h
+
+Partition kaydýnýn içeriði (Toplam 16 byte)
+
+Offset	Uzunluk		Açýklama
+00h	1 byte		80h=aktif partition, 0=aktif olmayan partition (aktif partition boot edilebilir partiondýr)
+01h	1 byte		partition baþlangýç kafasý
+02h	1 byte		partition baþlangýç sektörü (0-5. bitler kullanýlýr)
+03h	1 byte		partition baþlangýç izi (iz bitlerinin 8. ve 9.larý , 02h ofsetindeki sektörü belirten alanýn 6. ve 7. biti olarak yer alýr)
+04h 	1 byte		iþletim sistemi tanýmlama nosu
+05h	1 byte		partition bitiþ kafasý
+06h	1 byte		partition bitiþ sektörü (0-5. bitler kullanýlýr )
+07h	1 byte		partition bitiþ izi (iz bitlerinin 8. ve 9.larý , 02h ofsetindeki sektörü belirten alanýn 6. ve 7. biti olarak yer alýr)
+08h 	2 byte 		sectors preceding partition (??)
+0Ch	2 byte		partitiondaki toplam sektör adeti
+
+Burdaki 02h ve 03h sektörlerin anlaþýlmasý için tekrar inceleyelim:
+
+bitler:
+				
+	15  14  13  12  11  10  09  08 | 07  06  05  04  03  02  01 00
+ 	------------------------------   ------  ---------------------
+                        |                   |               |
+            iz bitlerinin 0-7.leri    iz bitlerin   sektör bitlerinin 0-5.leri
+				      8. ve 9.su
+
+Ayrýca 04h ofsetinde yer alan, bazý iþletim sistemi tanýmlama nolarý:
+
+00h	boþ partition tablosu girdisi
+..
+..
+..
+..
+..
+07h 	QNX,Windows NT NTFS
+..
+..
+0Bh	Windows 95 32-bit FAT
+..
+..
+..
+80h	Minix v1.1 - 1.4a
+81h	Minix v1.4b+
+81h	Linux
+..
+82h	Linux Swap partition
+..
+..
+..
+A5h	FreeBSD, BSD/386
+A6h	OpenBSD
+A9h	NetBSD (http://www.netbsd.org/)
+
+
+y.4 INT 18h - 
+
+
+
+------------------------------------------------------------------------
+
+
+Disk Boyutu:
+Kafa x Ýz x Sektör x 512byte (sector=512byte)
+Head * track * sector * (blocks * 512) * 8 = toplam bit
+
+
+Partition Tables:
+* All About Partition Tables and Sectors and FDISK http://www.ata-atapi.com/hiwtab.htm
+
++-------------------------------------+
+ CHS=0,0,1  | Master Boot Record containing       |
+            | partition table search program and  |
+            | a partition table                   |
+            | +---------------------------------+ |
+            | | DOS FAT partition description   | | points to CHS=0,1,1
+            | +---------------------------------+ | points to CHS=a
+            | | OS/2 HPFS partition description | |
+            | +---------------------------------+ |
+            | | unused table entry              | |
+            | +---------------------------------+ |
+            | | extended partition entry        | | points to CHS=b
+            | +---------------------------------+ |
+            +-------------------------------------+
+CHS=0,0,2   | the rest of "track 0" -- this is    | :
+to          | where the software drivers such as  | : normally
+CHS=0,0,n   | Ontrack's Disk Manager or Micro     | : unused
+            | House's EZ Drive are located.       | :
+            +-------------------------------------+
+CHS=0,1,1   | Boot sector for the DOS FAT         | :
+            | partition                           | : a DOS FAT
+            +-------------------------------------+ : file
+CHS=0,1,2   | rest of the DOS FAT partition       | : system
+to          | (FAT table, root directory and      | :
+CHS=x-1,n,n | user data area)                     | :
+            +-------------------------------------+
+CHS=x,0,1   | Boot sector for the OS/2 HPFS       | :
+            | file system partition               | : an OS/2
+            +-------------------------------------+ : HPFS file
+CHS=x,0,2   | rest of the OS/2 HPFS file system   | : system
+to          | partition                           | :
+CHS=y-1,n,n |                                     | :
+            +-------------------------------------+
+CHS=y,0,1   | Partition record for the extended   |
+            | partition containing a partition    |
+            | record program (never executed) and |
+            | a partition table                   |
+            | +---------------------------------+ |
+            | | DOS FAT partition description   | | points to CHS=b+1
+            | +---------------------------------+ |
+            | | unused table entry              | |
+            | +---------------------------------+ |
+            | | unused table entry              | |
+            | +---------------------------------+ |
+            | | unused table entry              | |
+            | +---------------------------------+ |
+            +-------------------------------------+
+CHS=y,0,2   | the rest of the first track of the  | : normally
+to          | extended partition                  | : unused
+CHS=y,0,n   |                                     | :
+            +-------------------------------------+
+CHS=y,1,1   | Boot sector for the DOS FAT         | :
+            | partition                           | : a DOS FAT
+            +-------------------------------------+ : file
+CHS=y,1,2   | rest of the DOS FAT partition       | : system
+to          | (FAT table, root directory and      | :
+CHS=n,n,n   | user data area)                     | :
+            +-------------------------------------+
+   
+
+
+
+x.1 Ek Kaynaklar
+Web üzerinde MBR ve boot prosedürü üzerine birçok kaynak bulunmakta. Bu kaynaklardan bazýlarýna burada deðinilmiþtir
+
+x.1.1 BIOS Boot Spesifikasyonu
+Bu spesifikasyon Compaq, Phoenix Technologies ve Intel tarafýndan hazýrlanmýþ.
+Spesifikasyon genel olarak, sistemdeki IPL (Initial Program Load) cihazlarýn bulunmasýndan,
+ve uygun cihaz kullanýlarak boot prosesin baþlatýlmasýndan bahsetmektedir.
+Spesifikasyonun okunmasý tavsiye edilmektedir ve burda kýsaca spesifikasyondan alýnmýþ bazý noktalara deðinilecektir:
+BAID: BIOS Aware IPL Device
+Bir iþletim sistemi boot edebilen herhangi bir cihazdýr. BAID cihazlarýn BIOS tarafýndan 
+spesifik bir kodla desteklenmesi gerekmektedir. Örnek BAID cihazlar: disket sürücü,
+harddisk, ATAPI CD-ROM vs...
+
+Bu spesifikasyon IPL Priotry (öncelikleri) tanýmlamaktadýr. Bu kullanýcý tarafýndan tanýmlanan 
+ve hangi cihazýn öncelikli olduðunu içeren bir bilgidir. (Örneðin sistem açýlýsýnda ilk olarak
+ATAPI-CDROM veya disket sürünücün denetlenmesi)
+
+Sistem açýlýþýnda tanýmlý önceliðe uygun olarak, IPL cihazlarý denetler ve uygun olandan sistemi açmaya
+çalýþýr. Eðerki hiçbir IPL cihaz, boot iþlemi için uygun bulunmazsa, genelde sistem bir mesajla durur ve
+kullanýcýnýn bir tuþa basmasýyla bilirkte tekrar INT 19h çalýþtýrýlýr.
+
+IPL cihazlar, iþletim sistemi boot prosesi için uygun olmadýðý veya sorun çýktýðý durumlarda kontrolü tekrar 
+BIOSa devredecek ve bunu INT 18h çaðrýsý ile bildirecektir. Örneðin: Bir að kartý, að üzerinden boot edilmek için
+konfigure edilmiþse fakat network kablosu baðlý deðilse, kart INT 18h ile bunun geri bildirimini yapacaktýr.
+
+http://www.nondot.org/sabre/os/files/Booting/BIOSBootSpecsV1.01.pdf
+
+
+x.2 Web Kaynaklarý
+
+x.2.1
+
+* Guide to x86 Bootstrapping (and Partitioning) http://www.nondot.org/sabre/os/files/Booting/x86Bootstrapping.html
+* Disassembly of a Master Boot Record (MBR) http://www.ata-atapi.com/hiwmbr.htm
+* All About Partition Tables and Sectors and FDISK http://www.ata-atapi.com/hiwtab.htm
+* http://www.win.tue.nl/~aeb/partitions/partition_types-1.html
+* http://www.nondot.org/~sabre/os/articles/TheBootProcess/
+* http://www.enderunix.org/docs/booting.html
+* http://www.ata-atapi.com/hiwdos.htm
+* http://www.ata-atapi.com/hiwchs.htm
+* http://www.dewassoc.com/kbase/hard_drives/hard_disk_sector_structures.htm
+* http://www.nondot.org/sabre/os/files/Booting/BootSector.html
+* http://www.ata-atapi.com/hiwtab.htm
+* http://en.wikipedia.org/wiki/Boot_loader#Boot_loader
+* http://www.pcguide.com/ref/hdd/file/structMBR-c.html
+* http://www.jegsworks.com/Lessons/lesson6/lesson6-3.htm
+* http://www.geocities.com/thestarman3/asm/mbr/MBR_in_detail.htm
+* http://www.win.tue.nl/~aeb/partitions/partition_types-2.html
+* http://www.nondot.org/sabre/os/files/Booting/nasmBoot.txt
+* http://www.dewassoc.com/kbase/hard_drives/lba.htm
+* http://www.dewassoc.com/kbase/hard_drives/master_boot_record.htm
+* http://www.pcsistem.net/konuimg/VGADISK/odev2.htm

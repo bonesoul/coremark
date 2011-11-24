@@ -1,0 +1,29 @@
+“volatile” hakkýnda
+
+volatile, derleyicinin belirtilen deðiþken üzerinde optimizasyon iþlemi yapmasýný önlemek içindir. 
+
+volatile unsigned char *baseAddr;
+lsb    = *handle->baseAddr;
+middle = *handle->baseAddr;
+msb    = *handle->baseAddr; 
+
+Yukarýdaki kod örneðinde baseAddr deðiþkeninden yapýlan okuma iþlemi sýrasýnda, deðerinin deðiþebileceðini varsayarsak, volatile kullanýmý gerekli olmaktadýr.
+
+volatile kullanýlmadýðý durumda derleyici yukarýdaki kodu þu þekilde optimize edebilir.
+
+lsb = middle = msb = *handle->baseAddr; 
+
+volatile'ýn bir diðer kullaným alanýda I/O portlarda ki veri aktarým iþlemidir.
+
+#define TTYPORT 0x17755U
+ volatile char *port17 = (char)*TTYPORT;
+*port17 = 'o';
+*port17 = 'N'; 
+
+volatile olmadýðýnda, derleyici bu kodu optimize ettiðinde,  *port17 = 'o'; satýrýný gereksiz olduðuna karar verebilir.
+
+NOT: volatile'ýn gereksiz kullanýmý optimizasyonu engelleyeceði için performans kaybýna neden olabilir
+
+NOT: volatile multi-threaded programlamada özellikle kullanýlmaktadýr.
+
+kaynak: http://www.phim.unibe.ch/comp_doc/c_manual/C/SYNTAX/volatile.html 

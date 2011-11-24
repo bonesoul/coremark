@@ -1,0 +1,2 @@
+qemu -fda kernel.img -boot a 
+#-s -S

@@ -1,0 +1,49 @@
+Interruplar handlerý neden C'de yazmamalýyýz?
+Bizimde son zamanda kafa patlattýðýmýz bir konu bu. C interrupt handler yazamaz mýyýz? Yazarýz yazdýkda. Ama sonucta gordük ki "not recommended" bir durummuþ gerçekten.
+
+Sorunu anlatmak gerekirse basitçe anlatýrsak þöyle. PIC controller, kesme hakkýnda iþlemciyi bilgilendirdiðinde, iþlemci otomatik olarak CLI() uygulayarak (bayraklarda oto degisiklik yaparak) kesmeleri gecici olarak deaktif ediyor. Bizim interrupt handlerýmýzýn bitisinden hemen önce iret ile kesmeden dönmemiz gerekiyor fakat direk C'de yazdýðýmýz handler, basarili bir iret için gerekli ortamý malasef sunamýyor. Bunun en büyük nedeni, interrupt handlerda hemen baslangicta CPU statei stacke kaydetme ve iretten hemen önce stacke kaydettiklerimizi geri yükleme gereksinimi. Bunun tek çözümü C handlerda inline assembly ile baslangicta verileri stacke kaydetmek ve sonradan geri yüklemek . Bu sekilde bir cozum uygularsanýz, C fonksiyonu icinde inline assembly yazarak kendinizi kandýrmýþ oluyorsunuz sonuc olarak  
+
+PLAIN TEXTC:
+
+c_int_handler()
+{
+__asm__("pusha");
+-- interrupt code --
+__asm__("popa");
+__asm__("iret");
+} 
+
+Buda asagi yukarý suna tekabul ediyor;
+
+PLAIN TEXTASM:
+
+c_int_handler:
+pusha
+-- interrupt code --
+popa
+iret
+ret 
+
+Bizimde ilk basta yapmaya calistigimiz gibi su sekilde bir kod yazarsanýz;
+
+PLAIN TEXTC:
+
+dead_handler()
+{
+-- interrupt code --
+__asm__("iret");
+} 
+Suna yakin birseyle karsilasiyorsunuz;
+
+
+PLAIN TEXTASM:
+
+dead_isr:
+push ebp
+mov ebp, esp
+-- interrupt code --
+iret
+pop ebp
+ret 
+Burada görebileceðiniz gibi iret sonrasý bozuk bir stack ve oda tahmin edebileceðiniz gibi bol bol çöken bir sistem anlamýna geliyor;Not:
+-- interrupt code -- kod bölümü artýk her ne interruptý iþleyecekseniz, o kýsýmla ilgilenen kod anlamýna geliyor ki bizim konu baþlýðýmýzýn tamamen dýþýnda. C fonksiyonuna bir cagriyla, C'de yazmakta serbestsiniz

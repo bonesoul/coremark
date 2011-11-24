@@ -1,0 +1,211 @@
+"protected mode: CPU exception & IRQ çakýþmalarý"
+
+x86 platformunda CPU exceptionlarý olarak þunlarý tanýmlamaktadýr;
+
+Exception # Description Error Code? 
+0 Division By Zero Exception No 
+1 Debug Exception No 
+2 Non Maskable Interrupt Exception No 
+3 Breakpoint Exception No 
+4 Into Detected Overflow Exception No 
+5 Out of Bounds Exception No 
+6 Invalid Opcode Exception No 
+7 No Coprocessor Exception No 
+8 Double Fault Exception Yes 
+9 Coprocessor Segment Overrun Exception No 
+10 Bad TSS Exception Yes 
+11 Segment Not Present Exception Yes 
+12 Stack Fault Exception Yes 
+13 General Protection Fault Exception Yes 
+14 Page Fault Exception Yes 
+15 Unknown Interrupt Exception No 
+16 Coprocessor Fault Exception No 
+17 Alignment Check Exception (486+) No 
+18 Machine Check Exception (Pentium/586+) No 
+19 to 31 Reserved Exceptions No 
+
+* Verilen exception numaralarý ayný zamanda interrupt numaraladýr. Örneðin Double Fault Exception, interrupt 8'i ateþleyecektir.
+
+Normalde sistemde 2 adet Interrupt Controller (PIC - programmable interrupt contoller) bulunmaktadýr. Bunlar master ve slave PIClerdir.
+
+Master PIC, IRQ0 ve IRQ7 kontol etmekte iken slave PIC, IRQ8 ve IRQ15'e kadar olanlarý kontrol eder.
+
+Sistem açýlýþýnda öntanýmlý olarak IRQ0 ve IRQ7 aralýðý, 8-15 interrupt aralýðýna eþleþtirilir. Ayný þekilde IRQ8 ve IRQ15 aralýðý 0x70-0x78 interrupt aralýðýna eþleþtirilmiþtir.
+
+Burdan görülebileceði üzere interrupt 8 ve interrupt 15 arasýndaki interruptlara hem CPU exceptionlar hemde IRQ0-IRQ7 baðlanmýþtýr. Bu, örneðin timer interrupt olan IRQ0'ýn Double Fault Exception olarak algýlanmasýna neden olabilir.
+
+Böyle bir sorunu gidermek için protected mode (korumalý mod) ile çalýþýrken, CPU exceptionlarla çakýþan IRQ0-IRQ7 aralýðýný, baþka kesmelere konumlandýrmamýz gerekir.
+
+Bu iþlemi master PICi yeniden programlayarak yapabiliriz.
+
+PIClerin yeniden programlanmasý saðlayan örnek kod;
+
+C:
+
+#define PIC1            0x20           /* IO base address for master PIC */
+#define PIC2            0xA0           /* IO base address for slave PIC */
+#define PIC1_COMMAND    PIC1
+#define PIC1_DATA       (PIC1+1)
+#define PIC2_COMMAND    PIC2
+#define PIC2_DATA       (PIC2+1)
+#define PIC_EOI         0x20            /* End - of - interrupt command code */
+ 
+#define ICW1_ICW4       0x01            /* ICW4 (not) needed */
+#define ICW1_SINGLE     0x02            /* Single (cascade) mode */
+#define ICW1_INTERVAL4  0x04            /* Call address interval 4 (8) */
+#define ICW1_LEVEL      0x08            /* Level triggered (edge) mode */
+#define ICW1_INIT       0x10            /* Initialization - required! */
+ 
+#define ICW4_8086       0x01            /* 8086/88 (MCS-80/85) mode */
+#define ICW4_AUTO       0x02            /* Auto (normal) EOI */
+#define ICW4_BUF_SLAVE  0x08            /* Buffered mode/slave */
+#define ICW4_BUF_MASTER 0x0C            /* Buffered mode/master */
+#define ICW4_SFNM       0x10            /* Special fully nested (not) * 
+ 
+static __inline__ unsigned char inportb(unsigned short);
+static __inline__ void outportb(unsigned short,unsigned char);
+static __inline__ void io_wait(void); 
+ 
+void remap_pics(int offset1,int offset2)
+{
+        unsigned char   a1, a2;
+ 
+        a1=inportb(PIC1_DATA);   // save masks
+        a2=inportb(PIC2_DATA);
+ 
+        outportb(PIC1_COMMAND, ICW1_INIT+ICW1_ICW4);  // starts the initialization sequence
+        io_wait();
+        outportb(PIC2_COMMAND, ICW1_INIT+ICW1_ICW4);
+        io_wait();
+        outportb(PIC1_DATA, offset1);                    // define the PIC vectors
+        io_wait();
+        outportb(PIC2_DATA, offset2);
+        io_wait();
+        outportb(PIC1_DATA, 4);                       // continue initialization sequence
+        io_wait();
+        outportb(PIC2_DATA, 2);
+        io_wait();
+ 
+        outportb(PIC1_DATA, ICW4_8086);
+        io_wait();
+        outportb(PIC2_DATA, ICW4_8086);
+        io_wait();
+ 
+        outportb(PIC1_DATA, a1);   // restore saved masks.
+        outportb(PIC2_DATA, a2);
+ 
+}
+ 
+static __inline__ void outportb(unsigned short port, unsigned char val)
+{
+  asm volatile("outb %0,%1"::"a"(val),"Nd" (port));
+}
+ 
+static __inline__ unsigned char inportb(unsigned short port)
+{
+  unsigned char ret;
+  asm volatile ("inb %1,%0":"=a"(ret):"Nd"(port));
+  return ret;
+}
+ 
+static __inline__ void io_wait(void)
+{
+  asm volatile("jmp 1f;1:jmp 1f;1:");
+} 
+
+Çekirdekte global descriptor tablosunu hazýrladýktan hemen sonra, interrupt descriptor tablosunu hazýrlama esnasýnda,
+
+C:
+
+remap_pics(0x20,0x28); 
+
+çaðrýsý ile master PIC 0x20, slave PIC ise 0x28 nolu kesmelere yönlendirilmiþtir. Bu yönlendirmeden sonra tablo þu haldededir;
+
+Interrupt (Kesme) Görev 
+Interrupt 0 CPU Exception: Division By Zero Exception 
+Interrupt 1 CPU Exception: Debug Exception 
+Interrupt 2 CPU Exception: Non Maskable Interrupt Exception 
+Interrupt 3 CPU Exception: Breakpoint Exception 
+Interrupt 4 CPU Exception: Into Detected Overflow Exception 
+Interrupt 5 CPU Exception: Out of Bounds Exception 
+Interrupt 6 CPU Exception: Invalid Opcode Exception 
+Interrupt 7 CPU Exception: No Coprocessor Exception 
+Interrupt 8 CPU Exception: Double Fault Exception 
+Interrupt 9 CPU Exception: Coprocessor Segment Overrun Exception 
+Interrupt 10 CPU Exception: Bad TSS Exception 
+Interrupt 11 CPU Exception: Segment Not Present Exception 
+Interrupt 12 CPU Exception: Stack Fault Exception 
+Interrupt 13 CPU Exception: General Protection Fault Exception 
+Interrupt 14 CPU Exception: Page Fault Exception 
+Interrupt 15 CPU Exception: Unknown Interrupt Exception 
+Interrupt 16 CPU Exception: Coprocessor Fault Exception 
+Interrupt 17 CPU Exception: Alignment Check Exception (486+) 
+Interrupt 18 CPU Exception: Machine Check Exception (Pentium/586+) 
+Interrupt 19 CPU Exception: Reserved Exception 
+Interrupt 20 CPU Exception: Reserved Exception 
+Interrupt 21 CPU Exception: Reserved Exception 
+Interrupt 22 CPU Exception: Reserved Exception 
+Interrupt 23 CPU Exception: Reserved Exception 
+Interrupt 24 CPU Exception: Reserved Exception 
+Interrupt 25 CPU Exception: Reserved Exception 
+Interrupt 26 CPU Exception: Reserved Exception 
+Interrupt 27 CPU Exception: Reserved Exception 
+Interrupt 28 CPU Exception: Reserved Exception 
+Interrupt 29 CPU Exception: Reserved Exception 
+Interrupt 30 CPU Exception: Reserved Exception 
+Interrupt 31 CPU Exception: Reserved Exception 
+Interrupt 32 Master PIC: IRQ0   Timer 
+Interrupt 33 Master PIC: IRQ1   Keyboard 
+Interrupt 34 Master PIC: IRQ2   Cascade (Slave IRQ iletiþimi için) * 
+Interrupt 35 Master PIC: IRQ3   COM2 
+Interrupt 36 Master PIC: IRQ4   COM1 
+Interrupt 37 Master PIC: IRQ5   Sound Card ** 
+Interrupt 38 Master PIC: IRQ6   Floppy disk controller 
+Interrupt 39 Master PIC: IRQ7   Parallel Port 
+Interrupt 40 Slave PIC  : IRQ8   Realm time clock 
+Interrupt 41 Slave PIC  : IRQ9   Open interrupt *** 
+Interrupt 42 Slave PIC  : IRQ10 Open interrupt 
+Interrupt 43 Slave PIC  : IRQ11 Open interrupt 
+Interrupt 44 Slave PIC  : IRQ12 PS/2 mouse 
+Interrupt 45 Slave PIC  : IRQ13 FPU coprocessor 
+Interrupt 46 Slave PIC  : IRQ14 Primary IDE channel 
+Interrupt 47 Slave PIC  : IRQ15 Secondary IDE channel 
+
+* Cascade IRQ, Master PIC üzerinde Slave IRQ için ayrýlmýþtýr. Slave IRQ daki herhangi bir kesme ateþlendiðinde, Slave PIC bunu IRQ2 üzerinden Master PIC’e bildirir ve Master PIC bunu CPU’ya yönlendirir.
+
+** Ses kartlarý için tercih edilen IRQ’dur
+
+*** IRQ10-11-12 sistemde ki aygýtlarýn kullanýmýna uygun olan boþ kesme alanlarýdýr.,
+
+NOT: Tablo yerleþimi göstersede, IDT tablosunun oluþturulmasý ve "lidt" ile CPU'ya bildirilmesi gerekmektedir ki bu baþka bir yazýnýn konusudur.
+
+C:
+
+static __inline__ void outportb(unsigned short port, unsigned char val)
+{
+  asm volatile("outb %0,%1"::"a"(val),"Nd" (port));
+}
+static __inline__ unsigned char inportb(unsigned short port)
+{
+  unsigned char ret;
+  asm volatile ("inb %1,%0":"=a"(ret):"Nd"(port));
+  return ret;
+}
+ 
+static __inline__ void io_wait(void)
+{
+  asm volatile("jmp 1f;1:jmp 1f;1:");
+} 
+
+outportb ile inportb, master ve slave port i/o iletiþimini saðlayan inline assembly fonksiyonlarýdýr.
+
+io_wait ise CPU'nun son I/O operasyonunu beklemesini saðlamaktadýr ki, master ve slave PIC'leri programlama sýrasýnda sorun çýkmasýn.
+
+Yazýda kullanýlan kaynaklar & kodlar:
+1 http://www.osdever.net/bkerndev/index.php?the_id=90
+2 http://www.mega-tokyo.com/osfaq/Can%20I%20remap%20the%20PIC%3F
+3 http://www.mega-tokyo.com/osfaq/SampleInlineFunctions
+4 http://sardes.inrialpes.fr/~taton/system2/doc/Clavier/8259pic.pdf
+5 http://www.osdever.net/tutorials/pic.php?the_id=38
+
+* Master ve slave PIC'i kodlanmasýný saðlayan remap_pics() fonksiyonun çalýþmasýný anlamak için 4 ve 5 nolu kaynaða göz atabilirsiniz. 

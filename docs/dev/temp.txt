@@ -1,0 +1,194 @@
+----------------------------------------------------------------------------------------
+http://www.osdev.org/phpBB2/viewtopic.php?t=2893&highlight=invalid+opcode
+
+The problem may be related to Optimization level u use while compiling ur code
+which contains mix of C and asm (using __asm__ __volatile__(...) stuff)
+
+If ur optimuization level is O2 or above, then some mem reference might be optimized for regiters. But u might be using that mem variable in __asm__() statement which may
+lead to unexpected error (where in i faced Exception 6) 
+
+http://www.osdev.org/phpBB2/viewtopic.php?t=2931&highlight=invalid+opcode
+GPF with Interrupts greater than 31 (solved)
+----------------------------------------------------------------------------------------
+http://www.osdev.org/phpBB2/viewtopic.php?t=10486&highlight=invalid+opcode
+
+To find the problem with the first IRQ I'd do 2 tests. The first test would be using the code (as it exists now) with the addition of an "INT 0x21" at the end of "enable_kisr()". This would check the IDT entry, ISR stub and the "kprintf()" code.
+
+The second test (if the first works fine) would be to add the EOI code and change "enable_kisr()" to:
+
+Code:
+void enable_kisr()
+{
+    unsigned scancode;
+    scancode = inportb(0x60);
+    AddInt(0x20, keyb_ISR, 0);
+    outportb(0x21, (inportb(0x21) & 0xFE));      // Enable IRQ 0!
+}
+
+
+'asm("int $0x21");' 
+----------------------------------------------------------------------------------------
+http://www.osdev.org/phpBB2/viewtopic.php?t=9016&highlight=invalid+opcode
+
+because you probably don't have a real big makefile system up now, all static data is put at the start of the file. This static data is initialized, so it's put in the file, but it's no code, yet you try to execute it as code (guessing here). Well, 00 is a valid code (add with modrm byte) but some of those after it are not.
+
+Use a proper linking script to avoid.
+----------------------------------------------------------------------------------------
+http://www.osdev.org/phpBB2/viewtopic.php?t=8115&highlight=invalid+opcode
+
+ISR20:
+CLI ; maybe this - disable interrupts
+
+STI ; if using CLI above, reenable interrupts
+iret 
+
+mark, please STOP using this approach of clearing the interrupt flag at the start of an interrupt handler ... this just makes no sense : the CPU has already cleared it when it called the handler and it will be re-enabled once the interrupt exits (as the previous value of eflags is stored on the stack prior to calling the handler ...)
+
+******* Imho, what is more likely to occur is that you're missing something in your pushes/pops and when you call IRET, it jumps to a wrong location ... ----------------------------------------------------------------------------------------
+http://www.osdev.org/phpBB2/viewtopic.php?t=7471&highlight=invalid+opcode
+
+i do not recommand at all the writing of interrupt handlers right in C
+- the C compiler will add a "push ebp ; mov ebp, esp" that you must take in account in your exit sequence. The problem is that if the compiler thinks it can optimize that out ...
+- you should make sure that optimizations will not ruin your plans. For instance, make sure that you have __volatile__ assembly commands (cannot be further optimized or removed)
+- you definitively *must* save / restore registers around your handler. returning from an interrupt without restoring registers value will result of randomly registers modifications in the main code ... which will for sure lead to global chaos ...
+- you must make sure you found back the stack state you had when entering ... it's common for GCC to post-pone the "add esp,x" that should be done right after a function call ... this means you're not even sure that your "IRET" command will act on the right stack datas ...
+
+Therefore, i strongly suggest you opt for a small ASM-based stub that will call a C function ... that stub can be made generic if wished (i.e. push the interrupt number, then jump to a common stub that will lookup the kernel handlers table with that number as an offset), or be hand-written, or duplicated from a template on demand ... whatever.
+If you still wish to code your interrupt in-and-out in plain C, i suggest you give a look at disassembled code (-s option in GCC) to make sure the code generated is the one you'd like to see executed by the CPU ...
+
+----------------------------------------------------------------------------------------
+
+http://www.osdev.org/phpBB2/viewtopic.php?t=7230&highlight=invalid+opcode
+
+I'm afraid we can't fix if we have no sources Wink however, there are plenty of possible reason for the exception to occur:
+- you didn't remap the IRQ properly, but in that case you would get a bunch of EXC#08 (one per clock cycle). The Operating System Resources Center should have infos about how to fix this
+- you didn't correctly set up your Interrupt Table Descriptor Register, but in that case, the IDT would hold garbage and reboots due to "triple fault"
+- your IDT holds invalid offsets (but then where the hell does the exception messages come from ? VMware itself ??)
+
+all these things can be tested by simply issuing an INT nn in your code rather than waiting an IRQ.
+
+other options are
+- there is a bug in your interrupt return that leads the code towards an invalid destination at IRQ return
+- the same (similar) bug in your exception handler leads the code to an invalid (constant) opcode and thus the system enters a loop
+----------------------------------------------------------------------------------------
+http://www.osdev.org/phpBB2/viewtopic.php?t=7230&highlight=invalid+opcode
+
+void dead_isr()
+{
+__asm__("iret\n\t");
+}
+
+I would check and make sure this is:
+
+dead_isr:
+iret
+ret
+
+instead of:
+
+dead_isr:
+push ebp
+mov ebp, esp
+iret
+pop ebp
+ret 
+
+----------------------------------------------------------------------------------------
+
+CMOS:
+http://www.osdev.org/osfaq2/index.php/CMOS
+----------------------------------------------------------------------------------------
+http://www.sandpile.org
+----------------------------------------------------------------------------------------
+http://www.osdev.org/phpBB2/viewtopic.php?t=11841&highlight=invalid+opcode
+As for my first question, the kernel place.... I decided my memory map to be like this:
+
+0x0000:0x0000 -> 0x0000:0x0500 BIOS stuff
+0x0000:0x0500 -> 0x0000:0x2500 GDT (256*32)
+0x0000:0x2500 -> 0x0000:0x4500 IDT (256*32)
+0x0000:0x4500 -> 0x0000:0x7c00 RootDirectory (may reside up to 440 file)
+0x0000:0x7c00 -> 0x0000:0x7e00 BootCode
+0x0000:0x7e00 -> 0x0000:0x8000 Stack for BootCode
+0x0000:0x8000 -> 0x0000:0x9000 OS Global Data
+0x0000:0x9000 -> 0x1000:0x0000 FAT (Nearly 28k for fat)
+0x1000:0x0000 -> 0xa000:0x0000 Place for kernel 
+----------------------------------------------------------------------------------------
+http://www.osdev.org/phpBB2/viewtopic.php?t=11559&highlight=invalid+opcode
+I hope you've set correct segment descriptor in IDT.
+
+
+----------------------------------------------------------------------------------------
+http://www.osdev.org/phpBB2/viewtopic.php?t=7471&postdays=0&postorder=asc&highlight=invalid+opcode&start=75
+
+Sorry, but you enfringed golden rule #1 of interrupts programming: SAVE and RESTORE everything that might be modified.
+including machine registers (eax, ecx ...) that you absolutely don't protect ... the CPU is likely to crash if some registers can be modified at random times.
+
+So, i know this is about writing a IDT in pure C, but now you have to face the truth: IDT setup is feasible in pure C (if you just do an asm(lidt)), but interrupt handlers MUST be written in ASM... Look at your own code, forcing pops from the stack frame, do you think it still looks like C ?
+maybe you could try the "interrupt" modifier for your code (though i dunno if it's 4|\|51 or if it's something Borland&MS added to C...
+
+However, i beleive that a good ASM stub is the better way to go. Look at this code if you need some reference ... that's something that works.
+
+IDThan0:
+pusha
+call C code
+popa
+iret 
+
+  pushl   %eax
+    pushl   %ds
+    pushl   %es
+    pushl   %fs
+    pushl   %gs
+
+    movl    $0x10, %eax
+    movw    %ax, %ds
+    movw    %ax, %es
+    movw    %ax, %fs
+    movw    %ax, %gs
+
+   call   _keyboard
+
+    movl    $0x20, %eax
+    outb    %al, $0x20
+
+   popl   %gs
+   popl   %fs
+   popl   %es
+   popl   %ds
+    popl   %eax
+    iret 
+
+EXTERN _KBD_Handler
+GLOBAL _IRQ1_Handler
+
+_IRQ1_Handler:
+     PUSHA
+     CALL _KBD_Handler
+     POPA
+IRET 
+
+
+http://osdever.net/bkerndev/index.php?the_id=90
+irq_common_stub:
+    pusha
+    push ds
+    push es
+    push fs
+    push gs
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov eax, esp
+    push eax
+    mov eax, _irq_handler
+    call eax
+    pop eax
+    pop gs
+    pop fs
+    pop es
+    pop ds
+    popa
+    add esp, 8
+    iret

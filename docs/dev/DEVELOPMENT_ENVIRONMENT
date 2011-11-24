@@ -1,0 +1,69 @@
+SETTING DEVELOPMENT ENVIRONMENT FOR KERNEL DEVELOPING PURPOSES
+
+This document servers for developers explaining how to  setup a development environment who
+wants to contribute the project.
+
+The project has been developed with listed software above. You need most of them to develop
+the project.
+
+* gcc
+* as (will be obsolete soon)
+* nasm
+* make
+* mbchk (project uses grub for booting, this utility check is image is grub-valid boot image)
+* BOCHS (x86 software emulator - testing for kernel mostly)
+* unzip
+
+Preparing the environment:
+--------------------------
+First make sure you meet all the software in your system. Try to use a latest BOCHS version
+(can be downloaded from http://bochs.sourceforge.net/ ) 
+Make sure that BIOS-bochs-latest (likely to be in /usr/share/bochs/) and vgabios (/usr/share/vgabios/) exists on your system.
+
+Now open the bochsrc file in the kernel directory.
+Find these lines and edit them according to your system	
+* romimage: 
+romimage: file="/usr/share/bochs/BIOS-bochs-latest", address=0xf0000
+
+* vgaromimage:
+vgaromimage: file="/usr/share/vgabios/vgabios.bin"
+
+* floppya: 
+floppya: 1_44="kernel.img", status=inserted (Be sure that the "kernel.img" part fits your output image's name which is configured via Makefile OUTPUT_IMAGE variable)
+
+We're done with the bochs configuration now.
+Time for compiling & running the system.
+Change directory to kernel/
+
+Give the command;
+	make
+
+If everything goes well, it'll say you so and give information about kernel.bin's grub compability
+
+Now give the command which creates a kernel image avaible for booting
+	make image
+
+If again everything was fine, then you'r lucky enough to boot the kernel :)
+
+First give the command
+	chmod +x run
+to make it a runnable file.
+
+Then give the command
+	./run
+
+Now you should see the Bochs with GRUB. Select the image, the kernel is in front of you now!
+
+
+Troubleshooting:
+
+* make image does not work on my system
+This is because of the some /dev/loop changes between 2.4 kernel and 2.6 kernel. Currently the build system on linux defaults to 2.6 and uses /dev/loop/0 for the loop device. If you're on a 2.4 kernel change all references of
+/dev/loop/0
+to
+/dev/loop0
+
+This will fix the image creation problem hopefully.
+
+
+

@@ -1,0 +1,24 @@
+Codename Coremark, is a next generation benchmarking software for x86 based computers.
+It's intented to benchmark your system as whole or within parts. Coremark is completely
+from any benchmark software. Up to know, usual benchmarking software has been always built
+on a commonly-used operating system like Windows, Linux etc. 
+
+So the other benchmarking software always relies on these commonly-used operating systems.
+These operating systems are designed for general use. While benchmarking these general-design
+operating systems can effect the benchmarking process or even user input while benchmarking
+can effect the process. This equals non-efficient benchmarks and scores changing from
+benchmark to benchmark.
+
+On the otherside, Coremark, utilizes it's own bultin kernel. The kernel residing under the
+Coremark, is specificly designed for benchmarking process.
+
+For more information check doc/ folder;
+
+doc/AUTHORS
+doc/CHANGELOG
+doc/INSTALL
+doc/LICENCE
+doc/MILESTONES
+doc/TODO
+doc/VERSIONING
+

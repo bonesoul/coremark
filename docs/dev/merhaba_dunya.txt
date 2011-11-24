@@ -1,0 +1,196 @@
+Hüseyin Uslu
+< huseyinuslu AT enux.org >
+
+Permission is granted to copy, distribute and/or modify this document under the terms of the GNU Free Documentation License, Version 1.2 or any later version published by the Free Software Foundation; with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts. A copy of the license is included in the section entitled "GNU Free Documentation License".
+
+Merhaba Dünya!
+
+Her programlama diline yeni baþlayan mutlaka bir "merhaba dünya" kodunu denemektedir. Aslýna 
+bakýlýrsa çekirdek programlama, yeni bir programlama dilinine baþlamak gibidir. Seçtiðiniz
+dilin size sunduðu hiç bir kütüphaneyi kullanamazsýnýz ve bu yordamlarý sizin geliþtirmeniz
+gerekmektedir. Bu yazýda basit bir çekirdek örneði göreceðiz ve "Merhaba Dünya" diyeceðiz.
+
+Örnek kodun yanýsýra, basit bir build scripti hazýrlayacaðýz ve en son olarakda Bochs emulatör ile 
+çalýþtýracaðýz.
+
+Basit bir iþletim sistemi çekirdeðinde iki temel yapýtaþý vardýr. Boot (önyükleme kodu) ve
+çekirdek kodu. Bu örnekte, önyükleme kodu üzerinde durulmayacak, bu iþlem oldukça geliþmiþ
+bir bootloader olan gruba býrakýlacaktýr. Grub birçok farklý formata destek vermektedir. 
+Multiboot header specification adýnda bir spesifikasyon yayýnlanmýþtýr ve bu doðrultuda yazacaðýnýz 
+kodunuzu, grup boot edebilmektedir.
+
+Bu spesifikasyona þu adresten eriþebilirsiniz:
+http://www.gnu.org/software/grub/manual/multiboot/multiboot.html
+
+Biz en basit haliyle bu dökümanda belirtilen iþlemleri gerçekleþtirip grubýn boot iþlemini üstlenmesini
+ saðlayacaðýz. Normal koþullarda spesifikasyon, çok detaylýdýr ve grub ayný þekilde çok detaylý iþlemler gerçekleþtirebilir. Ama biz oldukça sade bir biçimde sadece boot etmesini saðlayacaðýz.
+Bunun için grub bizden çekirdek imaj dosyamýzda þunlar olmasýný ister;
+?	Magic number; Grub'un bu dosyayý tanýyabilmesi için olan hex bir sayýdýr. (0x1BADB002)
+?	Bayraklar; Burda gruba boot iþlemi ile ilgili bayraklarý bildiririz. 
+?	32bit iþaretsiz bir tamsayýdýr ve 0-(magic_number+bayraklar) iþleminin sonucunda elde edilir. 
+
+Þimdi kaynak kod ve diðer dosyalarýmýzý görelim ve inceleyelim;
+
+Kernel.c
+/* 
+   Merhaba Dünya!
+   Huseyin Uslu
+*/
+        
+#include "include/multiboot.h" /* Grub Multiboot header spesifikasyonu */                                                                                                                                                              
+#define WHITE 0x07 
+
+void k_clrscr();
+void printk(char * message);
+void main();
+
+char * video_mem=(char *)0xb8000; /* video hafýzasý */
+unsigned int video_loc=0; /* video karakter lokasyonu */
+
+void _start() /* giris noktasý */
+{
+	static multiboot_hdr kern_hdr={0x1BADB002,0x00000000,0xE4524FFE}; 
+	/* magic number, bayraklar, checksum(0-magic_number+flags) */
+	main(); 
+}
+
+void main() 
+{
+	k_clrscr();
+	printk("Merhaba Dünya!\n");            
+};
+
+void k_clrscr() /* ekraný temizle */
+{
+/* 80 * 25 ekraný döngü ile temizle */
+	video_loc=0;
+	while (video_loc < (80 * 25 * 2 ))
+	{
+		video_mem[video_loc]=' '; /* bosluk karakteri*/
+		video_loc++;
+		video_mem[vdeo_loc]=WHITE; /* yazý rengi;beyaz */
+		video_loc++;
+	}
+	video_loc=0; /* karakter pozisyonunu resetle */
+}
+
+void printk(char * message) /* ekrana yazý yazýlmasýný saglar */
+{
+/* video hafýzasý her ekran lokasyonu için iki alan belirtir. 
+   ilk alan, basýlacak karakteri içerirken, ikinci alan ise,
+   karakterin attributelarýný belirtir (örneðin karakterin rengi).
+   Buna göre 1 satýr, 80 karakter * 2 birim yer tutar.
+*/
+	while (*message!='\0')
+	{
+		if(*message=='\n') /* yeni satir karakteri icin kontrol */
+		{
+			video_loc=(((video_loc/2)/80)+1)*160;
+			*message++;
+			video_loc+=2;
+		}
+		else
+		{
+			video_mem[video_loc]=*message; /* gönderilen mesaj icinden tek karakter bas */
+			*message++; /* sonraki karaktere geç */			
+			video_loc++;
+			video_mem[video_loc]=WHITE; /* karakterin yazý rengi; beyaz */
+			video_loc++; 		
+		}	
+	}
+	/* sona default /n yerlestir */
+	video_loc=(((video_loc/2)/80)+1)*160; 
+}
+
+
+
+include/multiboot.h:
+
+typedef struct multiboot_header /* Spesifikasyon tarafýndan gereken alanlarý tutmak için hazýrlanan structtýr */
+{
+  unsigned long magic;
+  unsigned long flags;
+  unsigned long checksum;
+}multiboot_hdr;
+
+typedef struct multiboot_information 
+{
+/* Information struct, yine spesifikasyon tarafýndan belirlenmiþtir. Biz örnek kodumuzda kullanmasakda, bu yapý sayesinde
+Grubtan örneðin command_line argümanlarýný, hafýza bilgilerini almak mümkündür. Daha fazla bilgi için spesifikasyona
+göz atýn */
+	unsigned long flags;
+	unsigned long mem_lower;
+	unsigned long mem_upper;
+	unsigned long boot_device;
+	char * cmdline;
+}multiboot_info;
+
+
+build_hello_world:
+Bu dosyada, basit bir yapýlandýrma scripti oluþturulmuþtur. Bu script sýrasýyla, /dev/loop0 üzerinde
+sanal bir floppy imaj oluþturmakta, bu imajý bir dizine mount etmekte, hazýr grub.img* dosyasýný, floppy.imga
+eklemekte ve son olarakda derleme ve link iþlemlerini yapmaktadýr.
+
+* Hazýr grub.img dosyasýna http://huslu.codecasters.web.tr/kernel/ugly_os/old/23.09.2004/grub_image/grub.img adresinden
+eriþebilinir
+
+Derleme iþlemi ile ilgili olarak:
+gcc -c kernel.c -o kernel.o -ffreestanding -nostdlib -fno-builtin -fno-exceptions
+-c Bu sayede derleme iþleminin intermeditiate aþamada kalmasýný,son çalýþtýrýlabilir bir çýktý istemediðimizi belirtiyoruz.
+-ffreestanding: Bu opsiyon, herhangi bir öniçeriðe ihtiyacýmýz olmadýðýný belirtir (http://m68hc11.serveftp.org/doc/gcc_2.html#IDX19)
+-nostdlib: Standart Libe ihtiyacýmýzýn olmadýðýný belirtir
+-fno-builtin: GCC'nin builtin yani hazýr fonksiyonlarýnýn dahil edilmesini istemiyoruz
+
+
+Linker iþlemi:
+ld kernel.o -o kernel.bin --oformat elf32-i386 -Ttext 0x100000
+--oformat elf32-i386: Output (çýktý) formatý: elf32-i386
+-Ttext 0x100000: .text sectionu 0x100000 konumuna konumlandýrýr
+
+echo "Merhaba dünya yapýlandýrýlýyor..."
+rm -f *.o
+rm -f floppy.img
+rm -f -R my_floppy
+echo "floopy.img /dev/loop0 üzerinde oluþturuluyor"
+dd if=/dev/zero of=floppy.img bs=512 count=2880
+losetup -d /dev/loop0
+losetup /dev/loop0 floppy.img
+mkdosfs /dev/loop0
+echo "floppy.img my_floppy dizininde mount ediliyor"
+mkdir my_floppy
+mount -t msdos /dev/loop0 my_floppy
+echo "Derleniyor..."
+gcc -c kernel.c -o kernel.o -ffreestanding -nostdlib -fno-builtin -fno-exceptions
+echo "Linking stage..."
+ld kernel.o -o kernel.bin --oformat elf32-i386 -Ttext 0x100000
+echo "kernel.bin multiboot header spesifikasyonu için kontrol ediliyor:"
+mbchk kernel.bin
+echo "Grub image floppy imajýna ekleniyor"
+cat grub_image/grub.img>/dev/loop0
+cp kernel.bin my_floppy
+echo "Ýþlem tamamlanýyor..."
+umount /dev/loop0
+rm -f *.o
+rm -f -R my_floppy
+rm -f kernel.bin
+
+Bu dökümanýn içerdiði kaynak kod dosyalarýna http://huslu.codecasters.web.tr/kernel/ugly_os/old/ adresinden ulaþabilirsiniz
+
+bochsrc.txt:
+Bu bochs'un sizin için oluþturduðu konfigurasyon dosyasýdýr. Genelde sizin bu dosya üzerinde direkt deðiþiklik yapmanýza gerek yoktur. Program içinden ayar
+bölümünü kullanabilirsiniz. Yinede bochs çalýþmýyorsa, bochsrc için sunlarý kontrol edin;
+
+romimage: file=/usr/share/bochs/BIOS-bochs-latest, address=0xf0000
+romimage dosyanýzýn yerini kontrol edin. Bochs bu dosyayý bulamazsa çalýþmayacaktýr
+
+vgaromimage: /usr/share/bochs/VGABIOS-elpin-2.40
+Ayný þekilde VGA rom imageýn yerinin de doðru olmasý gerekmektedir.
+
+boot: floppy
+floppya: 1_44="floppy.img", status=inserted
+floppyb: 1_44="none", status=inserted
+
+Burda ise sistem açýlýþýný floppy'e ayarlýyoruz ve floppya'ya bizim oluþturduðumuz floppy.img dosyasýný koymuþ oluyoruz. Duruma göre floppy.img ýn tam pathini
+vermeniz gerekebilir.
+
+

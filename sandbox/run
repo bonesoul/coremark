@@ -1,0 +1,3 @@
+echo "Running kernel image with Bochs"
+bochs -q -f bochsrc
+

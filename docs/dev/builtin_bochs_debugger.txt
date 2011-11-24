@@ -1,0 +1,281 @@
+8.11. Using Bochs internal debugger
+Note, if you are looking for a graphical front-end for the bochs debugger, you may want to check out BFE. This is a package written by a Bochs user which can interface with the text based Bochs debugger. No linking is necessary. It's not part of Bochs, but you may find it useful.
+
+You can now conditionally compile in a GDB like command line debugger, that allows you to set breakpoints, step through instructions, and other useful functions. If there isn't a command for something you believe is generally useful for the debugger, let me know and I'll implement it if possible.
+
+To use the debugger, you must configure Bochs with the --enable-debugger and --enable-disasm flags. For example:   ./configure --enable-debugger --enable-disasm
+ 
+
+
+Note: You must use flex version 2.5.4 or greater. I have heard that version 2.5.2 will not work.
+
+When you first start up Bochs, you will see the command line prompt   bochs:1>
+ 
+From here, you may use the following commands:
+
+8.11.1. Execution Control
+  c                           continue executing
+  continue
+
+  s     [count]               execute count instructions, default is 1
+  step  [count]
+  stepi [count]
+
+  Ctrl-C                      stop execution, and return to command line prompt
+  Ctrl-D                      if at empty line on command line, exit
+
+  q                           quit debugger and execution
+  quit
+  exit
+ 
+
+
+8.11.2. BreakPoints
+  NOTE: The format of 'seg', 'off', and 'addr' in these descriptions,
+        are as follows.  I don't have any way to set the current radix.
+
+        hexidecimal:    0xcdef0123
+        decimal:        123456789
+        octal:          01234567
+
+  vbreak seg:off              Set a virtual address instruction breakpoint
+  vb     seg:off
+
+  lbreak addr                 Set a linear address instruction breakpoint
+  lb     addr
+
+  pbreak [*] addr             Set a physical address instruction breakpoint
+  pb     [*] addr             (the '*' is optional for GDB compatibility)
+  break  [*] addr
+  b      [*] addr
+
+  info break                  Display state of all current breakpoints
+  bpe    n                    Enable a breakpoint
+  bpd    n                    Disable a breakpoint
+  delete n                    Delete a breakpoint
+  del    n
+  d      n
+
+ 
+
+
+8.11.3. Manipulating Memory
+  x  /nuf addr      Examine memory at linear address addr
+  xp /nuf addr      Examine memory at physical address addr
+     n              Count of how many units to display
+     u              Unit size; one of
+                      b Individual bytes
+                      h Halfwords (2 bytes)
+                      w Words (4 bytes)
+                      g Giant words (8 bytes)
+                      NOTE: these are *not* typical Intel nomenclature sizes,
+                            but they are consistent with GDB convention.
+     f              Printing format.  one of
+                      x Print in hexadecimal
+                      d Print in decimal
+                      u Print in unsigned decimal
+                      o Print in octal
+                      t Print in binary
+
+    n, f, and u are optional parameters.  u and f default to the last values
+    you used, or to w(words) and x(hex) if none have been supplied.
+    n currently defaults to 1.  If none of these optional parameters are
+    used, no slash should be typed.  addr is also optional.  If you don't
+    specify it, it will be the value the next address (as if you had
+    specified n+1 in the last x command).
+
+  setpmem addr datasize val    Set physical memory location of size
+                               datasize to value val.
+
+  crc  addr1  addr2            Show CRC32 for physical memory range addr1..addr2
+  info dirty                   Show physical pages dirtied (written to) since last display
+                               Values displayed are the top 20 bits only (page addresses)
+
+ 
+
+
+8.11.4. Info commands
+  info r|reg|regs|registers    List of CPU integer registers and their contents
+  info cpu                     List of all CPU registers and their contents
+  info fpu                     List of all FPU registers and their contents
+  info sse                     List of all SSE registers and their contents
+  info cr                      Show CR0-4 registers and their contents
+  info eflags                  Show decoded EFLAGS register
+  info break                   Information about current breakpoint status
+  info tab                     Show paging address translation
+ 
+
+
+8.11.5. Manipulating CPU Registers
+  set reg = expr    Change a CPU register to value of expression.
+                    Currently only general purpose registers are supported,
+                    you may not change:
+                      eflags, eip, cs, ss, ds, es, fs, gs.
+
+    Examples: set eax = 2+2/2
+              set esi = 2*eax+ebx
+
+  registers         List of CPU registers and their contents
+  regs
+  reg
+  r
+
+  dump_cpu          Dump complete CPU state
+  set_cpu           Set  complete CPU state
+
+    Format of "dump_cpu" and "set_cpu":
+    "eax:0x%x\n"
+    "ebx:0x%x\n"
+    "ecx:0x%x\n"
+    "edx:0x%x\n"
+    "ebp:0x%x\n"
+    "esi:0x%x\n"
+    "edi:0x%x\n"
+    "esp:0x%x\n"
+    "eflags:0x%x\n"
+    "eip:0x%x\n"
+    "cs:s=0x%x, dl=0x%x, dh=0x%x, valid=%u\n"
+    "ss:s=0x%x, dl=0x%x, dh=0x%x, valid=%u\n"
+    "ds:s=0x%x, dl=0x%x, dh=0x%x, valid=%u\n"
+    "es:s=0x%x, dl=0x%x, dh=0x%x, valid=%u\n"
+    "fs:s=0x%x, dl=0x%x, dh=0x%x, valid=%u\n"
+    "gs:s=0x%x, dl=0x%x, dh=0x%x, valid=%u\n"
+    "ldtr:s=0x%x, dl=0x%x, dh=0x%x, valid=%u\n"
+    "tr:s=0x%x, dl=0x%x, dh=0x%x, valid=%u\n"
+    "gdtr:base=0x%x, limit=0x%x\n"
+    "idtr:base=0x%x, limit=0x%x\n"
+    "dr0:0x%x\n"
+    "dr1:0x%x\n"
+    "dr2:0x%x\n"
+    "dr3:0x%x\n"
+    "dr4:0x%x\n"
+    "dr5:0x%x\n"
+    "dr6:0x%x\n"
+    "dr7:0x%x\n"
+    "cr0:0x%x\n"
+    "cr1:0x%x\n"
+    "cr2:0x%x\n"
+    "cr3:0x%x\n"
+    "cr4:0x%x\n"
+    "inhibit_int:%u\n"
+    "done\n"
+
+    Notes:
+      - s is the selector
+      - dl is the shadow descriptor low  dword (4 byte quantitiy)
+      - dh is the shadow descriptor high dword (4 byte quantitiy)
+      - valid denotes if the segment register holds a validated shadow descriptor
+      - inhibit_int is set if the previous instruction was one which delays the
+          acceptance of interrupts by one instruction (STI, MOV SS)
+      - any errors encountered by the set_cpu command, are reported by
+        "Error: ...".  They may be reported after any of the input lines,
+        or after the "done" line, during limit checks.
+      - A successful set_cpu command ends with the separate line:
+        "OK".
+ 
+
+
+8.11.6. Disassembly commands
+  disassemble start end       Disassemble instructions in given linear address
+                              range, inclusive of start, exclusive of end.
+                              Use "set $disassemble_size =" to tell
+                              debugger desired segment size.  Use a value for
+                              end of less than start (or zero) if you only
+                              want the first instruction disassembled.
+
+  disassemble switch-mode     Switch between Intel and AT&T disassebly styles
+                              for debugger disassembler.
+
+  disassemble size = n        Tell debugger what segment size to use when
+                              the "disassemble" command is used.  Use values
+                              of 0, 16 or 32 for n.  Value of 0 means
+			      "use segment size specified by current CS
+			      segment". Default is 0.
+
+  set $auto_disassemble = n   Cause debugger to disassemble current instruction
+                              every time execution stops if n=1.  Default is 0.
+                              Segment size of current CPU context is used for
+                              disassembly, so the "disassemble size" variable is
+                              ignored.
+
+  set disassemble on          The same as 'set $auto_disassemble = 1'
+  set disassemble off         The same as 'set $auto_disassemble = 0'
+ 
+
+
+8.11.7. Instruction tracing
+  trace on                    Disassemble every executed instruction. Note
+                              that instructions which caused exceptions are
+                              not really executed, and therefore not traced.
+
+  trace off                   Disable instruction tracing.
+ 
+
+
+8.11.8. Instrumentation
+To use instrumentation features in bochs, you must compile in support for it. You should build a custom instrumentation library in a separate directory in the "instrument/" directory. To tell configure which instrumentation library you want to use, use the "--enable-instrumentation" option. The default library consists of a set of stubs, and the following are equivalent:   ./configure [...] --enable-instrumentation
+  ./configure [...] --enable-instrumentation="instrument/stubs"
+ 
+You could make a separate directory with your custom library, for example "instrument/myinstrument", copy the contents of the "instrument/stubs" directory to it, then customize it. Use:   ./configure [...] --enable-instrumentation="instrument/myinstrument"
+ 
+
+
+8.11.9. Instrumentation commands
+  instrument start            calls bx_instr_start()
+  instrument stop             calls bx_instr_stop()
+  instrument reset            calls bx_instr_reset()
+  instrument print            calls bx_instr_print()
+ 
+
+
+8.11.10. Other Commands
+ptime
+ 
+Print the current time (number of ticks since start of simulation). sb delta
+ 
+Insert a time break point "delta" instructions into the future ("delta" is a 64-bit integer followed by "L", for example 1000L). sba time
+ 
+Insert a time break point at "time" ("time" is a 64-bit integer followed by "L", for example 1000L). record filename
+ 
+Record console input to file filename. The file consists of zero or more lines of the form "%s %d %x", where the first word is the event type, the second is a time stamp and the third is event specific data. playback filename
+ 
+Playback console input from file filename. Additional input can be given directly in the console window. Events in the file will be played back at times relative to the time when the playback command was executed. print-stack [num words]
+ 
+Print the num words top 16-bit words on the stack. Num words defaults to 16. Only works reliably in protected mode when the base address of the stack segment is zero. watch stop
+ 
+Stop the simulation (and return to prompt) when a watch point is encountered. watch continue
+ 
+Do not stop the simulation when watch points are encountered. They will still be logged. watch
+ 
+Print current watch point status. unwatch
+ 
+Remove all watch points. watch read address
+ 
+Insert a read watch point at physical address address. watch write address
+ 
+Insert a write watch point at physical address address. unwatch read address
+ 
+Remove read watch point from physical address address. unwatch write address
+ 
+Remove write watch point from physical address address. modebp
+ 
+Toggles CPU mode switch breakpoint. load-symbols [global] filename [offset]
+ 
+Load symbols from file filename. If the global keyword is added, then the the symbols will be visible in all contexts for which symbols have not been loaded. Offset (default is 0) is added to every symbol entry. The symbols are loaded in the current (executing) context.
+
+The symbol file consists of zero or more lines of the format "%x %s"
+ 
+. show [string]
+ 
+  Toggles show symbolic info (calls to begin with).
+  show - shows current show mode
+  show mode     - show, when processor switch mode
+  show int      - show, when interrupt is happens
+  show call     - show, when call is happens
+  show ret      - show, when iret is happens
+  show off      - toggles off symbolic info
+  show dbg-all  - turn on all show flags
+  show dbg-none - turn off all show flags
+ 
+
+http://bochs.sourceforge.net/cgi-bin/topper.pl?name=New+Bochs+Documentation&url=http://bochs.sourceforge.net/doc/docbook/user/index.html

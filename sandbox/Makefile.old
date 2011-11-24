@@ -1,0 +1,157 @@
+# Makefile
+# Avaible options; make, make image, make floppy, make iso, make clean
+
+# define variables
+CC = gcc
+CFLAGS =-g -ffreestanding -nostdlib -fno-builtin -fno-exceptions -Wall -fno-stack-protector
+COMPILE = $(CC) $(CFLAGS) -c
+OUTPUT_IMAGE= kernel.img # output image name 
+OUTPUT_ISO= kernel.iso
+TEMP_FOLDER= my_floppy # temproray directory name used while image creation
+ISO_DIR= iso
+
+# Loop device to be used while creating the image 
+LOOP_DEVICE= /dev/loop8 # set your loop device
+
+all: kernel.bin
+
+# clean directories for a clean rebuild
+clean:	
+	rm -f src/*.o
+	rm -f -R $(TEMP_FOLDER)
+	rm -f *.bin
+	rm -f *.img
+	rm -f *.iso
+	rm -f -R iso
+	rm -f src/*~ src/include/*~ *~
+
+# create a bootable raw image
+image:
+
+	rm -f -R $(TEMP_FOLDER)
+	rm -f $(OUTPUT_IMAGE)
+	dd if=/dev/zero of=$(OUTPUT_IMAGE) bs=512 count=2880
+	-mknod -m660 /dev/loop8 b 7 8
+	-/sbin/losetup -d $(LOOP_DEVICE) # if an error returns ignore it
+	/sbin/losetup $(LOOP_DEVICE) $(OUTPUT_IMAGE)	
+	mkdosfs $(LOOP_DEVICE)	
+	mkdir $(TEMP_FOLDER)
+	mount -t msdos $(LOOP_DEVICE) $(TEMP_FOLDER)
+	unzip grub.zip
+	cat grub.img>$(LOOP_DEVICE)
+	cp kernel.bin $(TEMP_FOLDER)
+	umount $(LOOP_DEVICE)
+	@echo "$(OUTPUT_IMAGE) is ready!"
+
+# create bootable ISO image using floppy emulation
+iso:
+
+	rm -f -R $(TEMP_FOLDER)
+	rm -f $(OUTPUT_IMAGE)
+	rm -f $(ISO_DIR)
+	mkdir $(ISO_DIR)
+	dd if=/dev/zero of=$(ISO_DIR)/$(OUTPUT_IMAGE) bs=512 count=2880
+	-mknod -m660 /dev/loop8 b 7 8
+	/sbin/losetup -d $(LOOP_DEVICE) # if an error returns ignore it
+	/sbin/losetup $(LOOP_DEVICE) $(ISO_DIR)/$(OUTPUT_IMAGE)	
+	mkdosfs $(LOOP_DEVICE)	
+	mkdir $(TEMP_FOLDER)
+	mount -t msdos $(LOOP_DEVICE) $(TEMP_FOLDER)
+	unzip grub.zip
+	cat grub.img>$(LOOP_DEVICE)
+	cp kernel.bin $(TEMP_FOLDER)
+	umount $(LOOP_DEVICE)
+	mkisofs -r -b $(ISO_DIR)/$(OUTPUT_IMAGE) -c $(ISO_DIR)/boot.catalog -o $(OUTPUT_ISO) .
+
+	@echo "$(OUTPUT_ISO) is ready!"
+
+# create a bootable floppy
+floppy:
+	@echo "Preparing the floppy. This may take a while..."
+	dd if=/dev/zero of=/dev/fd0 bs=512 count=2880
+	mkdosfs /dev/fd0
+	mkdir $(TEMP_FOLDER)
+	mount -t msdos /dev/fd0 $(TEMP_FOLDER)
+	unzip grub.zip
+	cat grub.img>/dev/fd0
+	cp kernel.bin $(TEMP_FOLDER)
+	umount $(TEMP_FOLDER)
+	@echo "Floppy is ready man!"
+
+kernel.bin: src/console.o src/pci.o src/cpuid.o src/boot.o src/cpu_info.o src/gdt.o src/gdt_flush.o src/isr.o src/irq_handler.o src/irq.o src/exception.o src/pic.o src/idt.o src/load_idt.o src/misc.o src/time.o src/multiboot.o src/kernel.o 
+
+	ld -T linker.ld src/boot.o src/pci.o src/cpuid.o src/console.o src/cpu_info.o src/gdt_flush.o src/gdt.o src/irq_handler.o src/irq.o src/isr.o src/exception.o src/load_idt.o src/pic.o src/idt.o src/misc.o src/time.o src/multiboot.o src/kernel.o -o kernel.bin --oformat elf32-i386
+	@echo "Here is the mbchk result of kernel.bin (shows if it's grub-bootable);"
+	mbchk kernel.bin
+	@echo " "
+	@echo "Kernel compiled.."
+	@echo "Now run make image to create the bootable image or make floppy to write it directly to a floppy disc"
+
+src/boot.o: src/boot.S
+	$(COMPILE) src/boot.S -o src/boot.o
+	
+src/pci.o: src/pci.c
+	$(COMPILE) src/pci.c -o src/pci.o
+
+src/command.o: src/command.c
+	$(COMPILE) src/command.c -o src/command.o
+
+src/console.o: src/console.c
+	$(COMPILE) src/console.c -o src/console.o
+
+src/cpuid.o: src/cpuid.asm
+	nasm -f elf -o src/cpuid.o src/cpuid.asm
+
+src/cpu_info.o: src/cpu_info.c
+	$(COMPILE) src/cpu_info.c -o src/cpu_info.o
+
+src/exception.o: src/exception.c
+	$(COMPILE) src/exception.c -o src/exception.o
+
+src/gdt.o: src/gdt.c	
+	$(COMPILE) src/gdt.c -o src/gdt.o
+
+src/gdt_flush.o: src/gdt_flush.asm
+	nasm -f elf -o src/gdt_flush.o src/gdt_flush.asm
+
+src/idt.o: src/idt.c
+	$(COMPILE) src/idt.c -o src/idt.o
+
+src/irq.o: src/irq.asm
+	nasm -f elf -o src/irq.o src/irq.asm
+
+src/irq_handler.o: src/irq_handler.c
+	$(COMPILE) src/irq_handler.c -o src/irq_handler.o
+
+src/isr.o: src/isr.asm
+	nasm -f elf -o src/isr.o src/isr.asm
+
+src/kernel.o: src/kernel.c
+	$(COMPILE) src/kernel.c -o src/kernel.o
+
+src/keyboard.o: src/keyboard.c
+	$(COMPILE) src/keyboard.c -o src/keyboard.o
+
+src/load_idt.o: src/load_idt.asm
+	nasm -f elf -o src/load_idt.o src/load_idt.asm
+
+src/misc.o: src/misc.c
+	$(COMPILE) src/misc.c -o src/misc.o
+
+src/pic.o: src/pic.c
+	$(COMPILE) src/pic.c -o src/pic.o
+
+src/time.o: src/time.c
+	$(COMPILE) src/time.c -o src/time.o
+
+src/smbios.o:	src/smbios.c
+	$(COMPILE) src/smbios.c -o src/smbios.o
+
+src/multiboot.o: src/multiboot.c
+	$(COMPILE) src/multiboot.c -o src/multiboot.o
+
+src/memtest.o: src/memtest.c
+	$(COMPILE) src/memtest.c -o src/memtest.o
+
+src/ata.o: src/ata.c
+	$(COMPILE) src/ata.c -o src/ata.o

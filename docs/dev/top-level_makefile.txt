@@ -1,0 +1,292 @@
+INC=../misc
+OTHERS=../misc/lib.a
+
+$(OTHERS):
+        cd $(INC); make lib.a
+
+http://www.hsrl.rutgers.edu/ug/make_help.html
+
+---------------------------------------------------
+
+3.12 An Example of Top-level Makefile
+ 
+
+# Top-level Makefile for TERRAIN
+
+ 
+
+# Macros, these should be generic for all machines
+
+ 
+
+.IGNORE:
+
+ 
+
+AR = ar ru
+
+CD = cd
+
+LN = ln -s
+
+MAKE = make -i -f Makefile
+
+RM = /bin/rm -f
+
+RM_LIST = *.o *.f core .tmpfile terrain.exe data_area.exe rdem.exe
+
+NCARGRAPHICS = NCARG
+
+#NCARGRAPHICS = NONCARG
+
+ 
+
+# Targets for supported architectures
+
+ 
+
+default:
+
+  uname -a > .tmpfile
+
+  grep CRAY .tmpfile ; \
+
+  if [ $$? = 0 ]; then echo "Compiling for CRAY" ; \
+
+  ( $(CD) src ; $(MAKE) all \
+
+  "RM = $(RM)" "RM_LIST = $(RM_LIST)" \
+
+  "LN = $(LN)" "MACH = CRAY" \
+
+  "MAKE = $(MAKE)" "CPP = /opt/ctl/bin/cpp" \
+
+  "CPPFLAGS = -I. -C -P -D$(NCARGRAPHICS) -DRECLENBYTE" \
+
+  "FC = f90" "FCFLAGS = -I." \
+
+  "LDOPTIONS = " "CFLAGS = " \
+
+  "LOCAL_LIBRARIES= -L/usr/local/lib -lncarg -lncarg_gks -lncarg_c -lX11 -lm" ) ; \
+
+else \
+
+  grep OSF .tmpfile ; \
+
+  if [ $$? = 0 ]; then echo "Compiling for Compaq" ; \
+
+  ( $(CD) src ; $(MAKE) all \
+
+  "RM = $(RM)" "RM_LIST = $(RM_LIST)" \
+
+  "LN = $(LN)" "MACH = DEC" \
+
+  "MAKE = $(MAKE)" "CPP = /usr/bin/cpp" \
+
+  "CPPFLAGS = -I. -C -P -D$(NCARGRAPHICS)" \
+
+  "FC = f77" "FCFLAGS = -I. -convert big_endian -fpe" \
+
+  "LDOPTIONS = " "CFLAGS = " \
+
+  "LOCAL_LIBRARIES= -L/usr/local/ncarg/lib -lncarg -lncarg_gks -lncarg_c -lX11 -lm" ) ; \
+
+else \
+
+  grep IRIX .tmpfile ; \
+
+  if [ $$? = 0 ]; then echo "Compiling for SGI" ; \
+
+  ( $(CD) src ; $(MAKE) all \
+
+  "RM = $(RM)" "RM_LIST = $(RM_LIST)" \
+
+  "LN = $(LN)" "MACH = SGI" \
+
+  "MAKE = $(MAKE)" "CPP = /lib/cpp" \
+
+  "CPPFLAGS = -I. -C -P -D$(NCARGRAPHICS)" \
+
+  "FC = f77" "FCFLAGS = -I. -n32" \
+
+  "LDOPTIONS = -n32" "CFLAGS = -I. -n32" \
+
+  "LOCAL_LIBRARIES= -L/usr/local/ncarg/lib -L/usr/local/lib -lncarg -lncarg_gks -lncarg_c -lX11 -lm" ) ; \
+
+else \
+
+  grep HP .tmpfile ; \
+
+  if [ $$? = 0 ]; then echo "Compiling for HP" ; \
+
+  ( $(CD) src ; $(MAKE) all \
+
+  "RM = $(RM)" "RM_LIST = $(RM_LIST)" \
+
+  "LN = $(LN)" "MACH = HP" \
+
+  "MAKE = $(MAKE)" "CPP = /opt/langtools/lbin/cpp" \
+
+  "CPPFLAGS= -I. -C -P -D$(NCARGRAPHICS) -DRECLENBYTE" \
+
+  "FC = f77" "FCFLAGS = -I. -O" \
+
+  "LDOPTIONS = " "CFLAGS = -Aa" \
+
+  "LOCAL_LIBRARIES= -L/usr/local/ncarg/lib -L/usr/local/lib -lncarg -lncarg_gks -lncarg_c -lX11 -lm" ) ; \
+
+else \
+
+  grep SUN .tmpfile ; \
+
+  if [ $$? = 0 ]; then echo "Compiling for SUN" ; \
+
+  ( $(CD) src ; $(MAKE) all \
+
+  "RM = $(RM)" "RM_LIST = $(RM_LIST)" \
+
+  "LN = $(LN)" "MACH = SUN" \
+
+  "MAKE = $(MAKE)" "CPP = /usr/ccs/lib/cpp" \
+
+  "CPPFLAGS=-I. -C -P -D$(NCARGRAPHICS) -DRECLENBYTE" \
+
+  "FC = f77" "FCFLAGS = -I." \
+
+  "LDOPTIONS = " "CFLAGS = -I." \
+
+  "LOCAL_LIBRARIES= -L/usr/local/ncarg/lib -L/usr/openwin/lib -L/usr/dt/lib -lncarg -lncarg_gks -lncarg_c -lX11 -lm" ) ; \
+
+else \
+
+  grep AIX .tmpfile ; \
+
+  if [ $$? = 0 ]; then echo "Compiling for IBM" ; \
+
+  ( $(CD) src ; $(MAKE) all \
+
+  "RM = $(RM)" "RM_LIST = $(RM_LIST)" \
+
+  "LN = $(LN)" "MACH = IBM" \
+
+  "MAKE = $(MAKE)" "CPP = /usr/lib/cpp" \
+
+  "CPPFLAGS = -I. -C -P -D$(NCARGRAPHICS) -DRECLENBYTE" \
+
+  "FC = xlf" "FCFLAGS = -I. -O -qmaxmem=-1"\
+
+  "LDOPTIONS = " "CFLAGS = -I." \
+
+  "LOCAL_LIBRARIES= -L/usr/local/lib32/r4i4 -lncarg -lncarg_gks -lncarg_c -lX11 -lm" ) ; \
+
+  fi ; \
+
+  fi ; \
+
+  fi ; \
+
+  fi ; \
+
+  fi ; \
+
+  fi ; \
+
+  ( $(RM) terrain.exe ; $(LN) src/terrain.exe . ) ;
+
+ 
+
+terrain.deck:
+
+  uname -a > .tmpfile
+
+  grep OSF .tmpfile ; \
+
+  if [ $$? = 0 ]; then \
+
+  echo "Making terrain deck for Compaq" ; \
+
+  ( cp Templates/terrain.deck.dec terrain.deck ) ; \
+
+    else \
+
+  grep CRAY .tmpfile ; \
+
+  if [ $$? = 0 ]; then \
+
+  echo "Making terrain deck for CRAY" ; \
+
+  ( cp Templates/terrain.deck.cray terrain.deck ) ; \
+
+    else \
+
+  grep IRIX .tmpfile ; \
+
+  if [ $$? = 0 ]; then \
+
+  echo "Making terrain deck for SGI" ; \
+
+  ( cp Templates/terrain.deck.sgi terrain.deck ) ; \
+
+    else \
+
+  grep HP .tmpfile ; \
+
+  if [ $$? = 0 ]; then \
+
+  echo "Making terrain deck for HP" ; \
+
+  ( cp Templates/terrain.deck.hp terrain.deck ) ; \
+
+    else \
+
+  grep SUN .tmpfile ; \
+
+  if [ $$? = 0 ]; then \
+
+  echo "Making terrain deck for SUN" ; \
+
+  ( cp Templates/terrain.deck.sun terrain.deck ) ; \
+
+    else \
+
+  grep AIX .tmpfile ; \
+
+  if [ $$? = 0 ]; then \
+
+  echo "Making terrain deck for IBM" ; \
+
+  ( cp Templates/terrain.deck.ibm terrain.deck ) ; \
+
+  fi; \
+
+  fi; \
+
+  fi; \
+
+  fi; \
+
+  fi; \
+
+  fi;
+
+ 
+
+code:
+
+  ( $(CD) src ; $(MAKE) code \
+
+  "MAKE = $(MAKE)" \
+
+  "CPP = /usr/bin/cpp" \
+
+  "CPPFLAGS = -I. -C -P -DDEC" )
+
+ 
+
+clean:
+
+  ( $(CD) src ; $(MAKE) clean "CD = $(CD)" "RM = $(RM)" "RM_LIST = $(RM_LIST)" )
+
+  $(RM) $(RM_LIST)
+
+http://www.mmm.ucar.edu/mm5/documents/MM5_tut_Web_notes/MAKE_UTILITY/make.htm
