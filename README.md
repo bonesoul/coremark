@@ -4,17 +4,17 @@ STATUS
 
 Right now, the project is in very early pre-alpha stage. The kernel can boot up right now and accomplish very basic tests.
 
-http://coremark.sourceforge.net/img/coremark.jpg
+![Screenshot](http://coremark.sourceforge.net/img/coremark.jpg)
 
 BENCHMARK SUBYSTEM
 
 In other benchmark tools, if you look at their structure you'll see it's similar to;
 
-http://coremark.sourceforge.net/img/other_tools.jpg
+![Screenshot](http://coremark.sourceforge.net/img/other_tools.jpg)
 
 But as coremark is based on it's own kernel, coremark is very simple compared to them in design.
 
-http://coremark.sourceforge.net/img/coremark_structure.jpg
+![Screenshot](http://coremark.sourceforge.net/img/coremark_structure.jpg)
 
 DEVELOPMENT
 
